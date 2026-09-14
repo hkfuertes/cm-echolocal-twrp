@@ -5,23 +5,23 @@ SOURCE_DATE_EPOCH=1700000000
 BASE_LEDCONTROLLER_SHA256=f7a2f96673fae0cb00836362f30d54ec15140829217c7c75b72b707af67ef0fc
 
 # EchoLocal release tag and the commit it peels to: the single source both the
-# binary and the models are built from. fetch-inputs.sh fails closed if the
+# binaries and the models are built from. fetch-inputs.sh fails closed if the
 # tag no longer resolves to this commit.
-ECHOLOCAL_TAG=0.0.6
-ECHOLOCAL_COMMIT=9dc8b663ed80248a3642d896b8982783adbd4867
+ECHOLOCAL_TAG=0.0.7
+ECHOLOCAL_COMMIT=1e57414f290f76fab6fe38a4ae34c5e467c5457a
 
 # echod is compiled from the tagged source inside this pinned toolchain image
-# (digest obtained via: docker pull golang:1.26.6 &&
-#  docker inspect --format '{{index .RepoDigests 0}}' golang:1.26.6).
+# (digest obtained via: docker pull golang:1.26.6 && docker inspect
+# --format '{{index .RepoDigests 0}}' golang:1.26.6).
 GO_IMAGE=golang:1.26.6@sha256:0d1d3a794be25f809dd2cb3160d8c73276c4056a9f8242a138e908ddeee7b6b6
 GOOS=linux
 GOARCH=${GOARCH:-arm64}
 GOARM=${GOARM:-7}
 
-# Expected SHA-256s of deterministic builds (tag + image + flags above).
-# A mismatch means toolchain or recipe drift; re-pin the affected target.
-ECHOD_ARM64_SHA256=b1609fd114218adf6a79fb6a396855c9a90715ea977c9c01ef0b19e353a2c457
-ECHOD_ARMV7_SHA256=b72a1f8a8b116ed262855cef4949f1340197de8fec1081342e3e2984b4ef7537
+# Expected SHA-256s of deterministic clean builds (tag + image + flags above).
+# Re-pin only after independently rebuilding the affected target.
+ECHOD_ARM64_SHA256=72957c9a9fc7056f7f0c6c74e9c4ebce5d7c8a1a57a81b7cf0b249fa90617dee
+ECHOD_ARMV7_SHA256=b87fa111c033185079a301f6adc9748cdc6483f2c19f621a58176074fa57bbaf
 case "$GOARCH:$GOARM" in
     arm64:*) ECHOD_ARCH=arm64; ECHOD_SHA256=$ECHOD_ARM64_SHA256 ;;
     arm:7)   ECHOD_ARCH=armv7; ECHOD_SHA256=$ECHOD_ARMV7_SHA256 ;;

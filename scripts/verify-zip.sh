@@ -75,11 +75,6 @@ for relative in system/etc/echolocal/.biscuit-addon \
     mode_is "$tmp/install/payload/$relative" 644
 done
 require_static "packaged echod" "$tmp/install/payload/system/app/echod/echod" "$GOARCH"
-if [ "$ECHOD_ARCH" = armv7 ]; then
-    grep -Fq 'self-update disabled on ARMv7; flash a TWRP installer' \
-        "$tmp/install/payload/system/app/echod/echod" ||
-        fail 'ARMv7 echod does not disable self-update'
-fi
 sh -n "$tmp/install/payload/system/bin/echolocal"
 sh -n "$tmp/install/payload/system/bin/start_animation.sh"
 sh -n "$tmp/install/payload/system/bin/stop_animation.sh"
