@@ -3,7 +3,7 @@ set -eu
 
 . "$(dirname "$0")/common.sh"
 
-for tool in cp date docker file git id rm sha256sum; do
+for tool in date docker file git id sha256sum; do
     need "$tool"
 done
 
@@ -15,27 +15,6 @@ source_tree="$SOURCES/echolocal"
 
 commit_short=$(git -C "$source_tree" rev-parse HEAD | cut -c1-7)
 build_date=$(date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ')
-
-build_tree=$source_tree
-if [ "$ECHOD_ARCH" = armv7 ]; then
-    # Never modify the pinned checkout: these are separate ARMv7-only preflights.
-    build_tree="$WORK/build/echolocal-armv7"
-    rm -rf "$build_tree"
-    mkdir -p "$(dirname "$build_tree")"
-    cp -a "$source_tree" "$build_tree"
-
-    for patch in \
-        "$ROOT/scripts/patches/echolocal-armv7-alsa-abi.patch" \
-        "$ROOT/scripts/patches/echolocal-armv7-input-abi.patch" \
-        "$ROOT/scripts/patches/echolocal-armv7-disable-self-update.patch"
-    do
-        [ -f "$patch" ] || fail "missing ARMv7 ABI patch: $patch"
-        git -C "$build_tree" apply --check --unidiff-zero "$patch" ||
-            fail "ARMv7 ABI patch does not apply to $ECHOLOCAL_COMMIT: ${patch##*/}"
-        git -C "$build_tree" apply --unidiff-zero "$patch"
-        printf '%s\n' "preflight: ARMv7 patch applies: ${patch##*/}"
-    done
-fi
 
 artifact_dir="$INPUTS/$ECHOD_ARCH"
 artifact="$artifact_dir/echod"
@@ -52,7 +31,7 @@ docker build --quiet \
     --build-arg BUILD_DATE="$build_date" \
     --target artifacts \
     --output "type=local,dest=$artifact_dir" \
-    "$build_tree"
+    "$source_tree"
 
 require_static "echod" "$artifact" "$GOARCH"
 require_hash "$artifact" "$ECHOD_SHA256"

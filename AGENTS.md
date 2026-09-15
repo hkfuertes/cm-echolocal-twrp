@@ -14,9 +14,11 @@ framework-free Biscuit `cm12-minimal` base. Keep this project independent from
 - Generic init already starts and supervises `ledcontroller` as root after
   `post-fs-data`. Do not change boot.img, ramdisk, recovery, GPT, cache, or
   persist to integrate EchoLocal.
-- Use the base-provided `/system/xbin/busybox`; require it to be a regular,
-  executable file and never overwrite or remove it. The base also owns TLS
-  trust roots; never package, overwrite, or remove them.
+- Use only the required base commands (`base64`, `cat`, `chown`, `chmod`,
+  `cp`, `dd`, `id`, `mkdir`, `mv`, `rm`, `setprop`, and `wc`) through the
+  fixed `/system/bin:/system/xbin` path; require each to be executable and
+  never overwrite or remove base tools. They may be Toybox/Toolbox symlinks.
+  The base also owns TLS trust roots; never package, overwrite, or remove them.
 - Fail closed on a wrong device, wrong fallback, missing marker, bad payload,
   bad mode/context, unsafe symlink, or insufficient free space.
 
@@ -53,15 +55,12 @@ framework-free Biscuit `cm12-minimal` base. Keep this project independent from
 ## Pinned inputs and repository hygiene
 
 - `scripts/versions.sh` is the source of truth for revisions and SHA-256s.
-  Build `echod` from the pinned EchoLocal tag (which must peel to the pinned
-  commit) inside the Docker toolchain image pinned by digest; verify each
-  target binary against its pinned SHA-256 and as a static ELF executable for
-  its target architecture (AArch64 or ARMv7). The ARMv7 build applies its
-  tracked ALSA, evdev-input ABI, and self-update-disable patches only to an
-  isolated work copy, each after a clean-apply preflight; ARM64 always builds
-  the unpatched tag. Model
-  assets and any future
-  add-on-owned runtime tool follow the same rule.
+  Build both ARM64 and ARMv7 `echod` targets from the pinned EchoLocal tag
+  (which must peel to the pinned commit) inside the Docker toolchain image
+  pinned by digest. Verify each target binary against its pinned SHA-256 and
+  as a static ELF executable for its target architecture. Do not carry local
+  ARMv7 source patches or upstream prebuilt binaries. Model assets and any
+  future add-on-owned runtime tool follow the same rule.
 - Do not commit downloads, generated models, staging trees, or ZIPs. They
   belong under ignored `work/` and `out/`.
 - Keep the implementation small: POSIX shell, existing host tools, and no new
