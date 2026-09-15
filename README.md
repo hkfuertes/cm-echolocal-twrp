@@ -12,8 +12,8 @@ A reproducible, TWRP-flashable EchoLocal add-on for the framework-free Biscuit
   animation hooks exist, preserves them as `.orig`; the current minimal base
   has neither, so it does not create dead hooks;
 - compiles ARM64 and ARMv7 `echod` from the pinned upstream EchoLocal tag with
-  verified wake-word models while using the BusyBox and TLS trust store already
-  supplied by the base;
+  verified wake-word models while using only ROM-supplied commands and TLS
+  trust roots;
 - initializes a missing ESPHome key and missing wake-word models on first install,
   without overwriting existing runtime state; and
 - provides `echolocal repair` to recreate missing state after a `/data` wipe.
@@ -24,7 +24,9 @@ ZIP afterwards.
 
 ## Base requirements
 
-- `/system/xbin/busybox` must be a regular executable supplied by `cm12-minimal`.
+- `base64`, `cat`, `chown`, `chmod`, `cp`, `dd`, `id`, `mkdir`, `mv`, `rm`,
+  `setprop`, and `wc` must be executable under `/system/bin` or
+  `/system/xbin`; Toybox/Toolbox symlinks are accepted.
 - CM12 owns the TLS trust roots. This ZIP never packages, overwrites, or
   removes certificates.
 

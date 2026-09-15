@@ -25,7 +25,8 @@ DF=${DF:-df}
 SERVICE="$SYSTEM/bin/ledcontroller"
 BACKUP="$SERVICE.orig"
 ECHOD="$SYSTEM/app/echod/echod"
-BASE_BUSYBOX="$SYSTEM/xbin/busybox"
+BASE_TOOLS='base64 cat chown chmod cp id mkdir mv rm setprop wc'
+BASE_DD=dd
 START_ANIMATION="$SYSTEM/bin/start_animation.sh"
 STOP_ANIMATION="$SYSTEM/bin/stop_animation.sh"
 START_BACKUP="$START_ANIMATION.orig"
@@ -68,6 +69,14 @@ hash_file() {
 
 require_regular() {
     [ -f "$1" ] && [ ! -L "$1" ] || die "expected regular file: $1"
+}
+
+require_base_tool() {
+    tool=$1
+    for path in "$SYSTEM/bin/$tool" "$SYSTEM/xbin/$tool"; do
+        [ -x "$path" ] && return 0
+    done
+    die "base lacks required tool: $tool"
 }
 
 require_link_target() {
@@ -279,8 +288,10 @@ product=$(read_prop ro.product.device)
 [ -n "$product" ] || product=$(read_prop ro.build.product)
 [ "$product" = biscuit ] || die "this ZIP is only for Biscuit (got ${product:-unknown})"
 ensure_system
-require_regular "$BASE_BUSYBOX"
-[ -x "$BASE_BUSYBOX" ] || die "base BusyBox is not executable: $BASE_BUSYBOX"
+for tool in $BASE_TOOLS; do
+    require_base_tool "$tool"
+done
+require_base_tool "$BASE_DD"
 
 if [ -f "$MARKER" ]; then
     require_regular "$MARKER"
@@ -339,14 +350,14 @@ needed=$((PAYLOAD_BYTES / 1024 + 1024))
 STAGE="$TMPDIR/echolocal-install.$$"
 rm -rf "$STAGE"
 mkdir -p "$STAGE" || die 'could not create recovery staging directory'
-"$UNZIP" -o "$ZIP" 'payload/*' payload-manifest.sha256 -d "$STAGE" >/dev/null ||
+"$UNZIP" -o "$ZIP" -d "$STAGE" >/dev/null ||
     die 'could not extract payload'
 require_regular "$STAGE/payload-manifest.sha256"
 [ "$(hash_file "$STAGE/payload-manifest.sha256")" = "$MANIFEST_SHA256" ] ||
     die 'payload manifest hash mismatch'
 ( cd "$STAGE" && "$SHA256SUM" -c payload-manifest.sha256 ) >/dev/null 2>&1 ||
     die 'payload file hash mismatch'
-[ -z "$(find "$STAGE/payload" -type l -print)" ] || die 'payload contains an unexpected symlink'
+[ -z "$(find "$STAGE" -type l -print)" ] || die 'installer ZIP contains an unexpected symlink'
 
 for relative in \
     system/bin/echolocal \

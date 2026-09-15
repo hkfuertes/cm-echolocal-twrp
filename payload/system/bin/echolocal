@@ -4,60 +4,66 @@ set -eu
 
 SYSTEM=${ECHOLOCAL_SYSTEM:-/system}
 STATE=${ECHOLOCAL_STATE:-/data/misc/echolocal}
-BB="$SYSTEM/xbin/busybox"
 KEY="$STATE/psk"
 MODELS="$STATE/models"
 SEED="$SYSTEM/etc/echolocal/models"
+BASE_TOOLS='base64 cat chown chmod cp id mkdir mv rm setprop wc'
+BASE_DD=dd
 
 fail() {
     printf 'echolocal: %s\n' "$*" >&2
     exit 1
 }
 
-[ -x "$BB" ] || fail "missing base BusyBox"
+PATH="$SYSTEM/bin:$SYSTEM/xbin:$PATH"
+export PATH
+for tool in $BASE_TOOLS; do
+    command -v "$tool" >/dev/null 2>&1 || fail "missing base tool: $tool"
+done
+command -v "$BASE_DD" >/dev/null 2>&1 || fail "missing base tool: $BASE_DD"
 
 require_root() {
-    case "$("$BB" id)" in
+    case "$(id)" in
         uid=0\(*) ;;
         *) fail 'requires root ADB' ;;
     esac
 }
 
 ensure_state() {
-    "$BB" mkdir -p "$STATE"
-    "$BB" chown root:system "$STATE"
-    "$BB" chmod 0770 "$STATE"
+    mkdir -p "$STATE"
+    chown root:system "$STATE"
+    chmod 0770 "$STATE"
 }
 
 write_key() {
     tmp="$STATE/.psk.$$"
     umask 077
-    "$BB" dd if=/dev/urandom bs=32 count=1 2>/dev/null | "$BB" base64 > "$tmp"
-    [ "$("$BB" wc -c < "$tmp")" = 45 ] || {
-        "$BB" rm -f "$tmp"
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 > "$tmp"
+    [ "$(wc -c < "$tmp")" = 45 ] || {
+        rm -f "$tmp"
         fail 'could not generate a 32-byte key'
     }
-    "$BB" chown root:system "$tmp"
-    "$BB" chmod 0600 "$tmp"
-    "$BB" mv -f "$tmp" "$KEY"
+    chown root:system "$tmp"
+    chmod 0600 "$tmp"
+    mv -f "$tmp" "$KEY"
 }
 
 key_ensure() {
     ensure_state
     [ -s "$KEY" ] || write_key
-    "$BB" chown root:system "$KEY"
-    "$BB" chmod 0600 "$KEY"
+    chown root:system "$KEY"
+    chmod 0600 "$KEY"
 }
 
 key_show() {
     [ -s "$KEY" ] || fail "no key at $KEY"
-    "$BB" cat "$KEY"
+    cat "$KEY"
 }
 
 key_rotate() {
     ensure_state
     write_key
-    "$SYSTEM/bin/setprop" ctl.restart ledcontroller
+    setprop ctl.restart ledcontroller
     printf '%s\n' 'Update Home Assistant with this new key:' >&2
     key_show
 }
@@ -69,9 +75,9 @@ seed_model() {
         destination="$MODELS/$model.$extension"
         [ -f "$source" ] || fail "missing seeded model: $source"
         if [ ! -f "$destination" ]; then
-            "$BB" cp "$source" "$destination"
-            "$BB" chown root:system "$destination"
-            "$BB" chmod 0644 "$destination"
+            cp "$source" "$destination"
+            chown root:system "$destination"
+            chmod 0644 "$destination"
         fi
     done
 }
@@ -80,13 +86,13 @@ repair() {
     had_key=0
     [ -s "$KEY" ] && had_key=1
     key_ensure
-    "$BB" mkdir -p "$MODELS"
-    "$BB" chown root:system "$MODELS"
-    "$BB" chmod 0770 "$MODELS"
+    mkdir -p "$MODELS"
+    chown root:system "$MODELS"
+    chmod 0770 "$MODELS"
     for model in okay_nabu hey_jarvis hey_mycroft; do
         seed_model "$model"
     done
-    "$SYSTEM/bin/setprop" ctl.restart ledcontroller
+    setprop ctl.restart ledcontroller
     [ "$had_key" -eq 1 ] ||
         printf '%s\n' 'A new ESPHome key was generated; run `echolocal key show` before pairing again.' >&2
 }

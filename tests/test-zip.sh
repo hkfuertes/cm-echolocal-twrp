@@ -5,6 +5,8 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/versions.sh"
 INSTALL_ZIP=${1:-"$ROOT/out/$ADDON_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"}
 FIXTURE="$ROOT/tests/fixtures/ledcontroller"
+HOST_UNZIP=$(command -v unzip)
+[ -n "$HOST_UNZIP" ] || { printf '%s\n' 'missing host unzip' >&2; exit 1; }
 [ "$(sha256sum "$FIXTURE" | awk '{print $1}')" = "$BASE_LEDCONTROLLER_SHA256" ] || {
     printf '%s\n' 'generic fallback fixture hash changed' >&2
     exit 1
@@ -38,16 +40,28 @@ cat > "$tmp/bin/chown" <<'EOF'
 exit 0
 EOF
 chmod 0755 "$tmp/bin/getprop" "$tmp/bin/chcon" "$tmp/bin/df" "$tmp/bin/chcon-fails" "$tmp/bin/chown"
+cat > "$tmp/bin/unzip-no-glob" <<EOF
+#!/bin/sh
+for argument in "\$@"; do
+    [ "\$argument" != 'payload/*' ] || exit 1
+done
+unset UNZIP
+exec "$HOST_UNZIP" "\$@"
+EOF
+chmod 0755 "$tmp/bin/unzip-no-glob"
 unzip -q "$INSTALL_ZIP" -d "$tmp/install"
 install_binary="$tmp/install/META-INF/com/google/android/update-binary"
 
 setup_system() {
     rm -rf "$1" "$1-data"
-    mkdir -p "$1/bin" "$1/xbin" "$1/etc/ssl/certs" "$1-data/misc"
+    mkdir -p "$1/bin" "$1/etc/ssl/certs" "$1-data/misc"
     cp "$FIXTURE" "$1/bin/ledcontroller"
-    printf '%s\n' '#!/bin/sh' 'exit 0' > "$1/xbin/busybox"
+    for tool in base64 cat chown chmod cp dd id mkdir mv rm setprop wc; do
+        printf '%s\n' '#!/bin/sh' 'exit 0' > "$1/bin/$tool"
+        chmod 0755 "$1/bin/$tool"
+    done
     printf '%s\n' 'base CA bundle' > "$1/etc/ssl/certs/ca-certificates.crt"
-    chmod 0755 "$1/bin/ledcontroller" "$1/xbin/busybox"
+    chmod 0755 "$1/bin/ledcontroller"
     chmod 0644 "$1/etc/ssl/certs/ca-certificates.crt"
     case "${2:-managed}" in
         managed)
@@ -73,6 +87,13 @@ run_update_folded_df() {
         sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
 }
 
+run_update_no_glob_unzip() {
+    TEST_PRODUCT=biscuit ECHOLOCAL_SYSTEM="$2" ECHOLOCAL_STATE="$2-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
+        ECHOLOCAL_FREE_KB=999999 GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" \
+        UNZIP="$tmp/bin/unzip-no-glob" \
+        sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
+}
+
 run_update_label_failure() {
     TEST_PRODUCT=biscuit ECHOLOCAL_SYSTEM="$2" ECHOLOCAL_STATE="$2-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
         ECHOLOCAL_FREE_KB=999999 GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon-fails" CHOWN="$tmp/bin/chown" \
@@ -81,7 +102,6 @@ run_update_label_failure() {
 
 system="$tmp/system"
 setup_system "$system"
-base_busybox_hash=$(sha256sum "$system/xbin/busybox" | awk '{print $1}')
 base_ca_hash=$(sha256sum "$system/etc/ssl/certs/ca-certificates.crt" | awk '{print $1}')
 run_update "$install_binary" "$INSTALL_ZIP" "$system" biscuit 999999
 [ -f "$system/bin/ledcontroller.orig" ]
@@ -90,7 +110,6 @@ run_update "$install_binary" "$INSTALL_ZIP" "$system" biscuit 999999
 [ "$(sha256sum "$system/bin/ledcontroller.orig" | awk '{print $1}')" = "$BASE_LEDCONTROLLER_SHA256" ]
 [ -f "$system/etc/echolocal/.biscuit-addon" ]
 grep -qx "version=$ECHOLOCAL_TAG" "$system/etc/echolocal/.biscuit-addon"
-[ "$(sha256sum "$system/xbin/busybox" | awk '{print $1}')" = "$base_busybox_hash" ]
 [ "$(sha256sum "$system/etc/ssl/certs/ca-certificates.crt" | awk '{print $1}')" = "$base_ca_hash" ]
 grep -qx 'animation_hooks=managed' "$system/etc/echolocal/.biscuit-addon"
 [ "$(cat "$system/bin/start_animation.sh.orig")" = 'stock start animation' ]
@@ -123,6 +142,11 @@ setup_system "$folded_df"
 run_update_folded_df "$install_binary" "$folded_df"
 [ -L "$folded_df/bin/ledcontroller" ]
 
+no_glob_unzip="$tmp/no-glob-unzip"
+setup_system "$no_glob_unzip"
+run_update_no_glob_unzip "$install_binary" "$no_glob_unzip"
+[ -L "$no_glob_unzip/bin/ledcontroller" ]
+
 label_failure="$tmp/label-failure"
 setup_system "$label_failure"
 run_update_label_failure "$install_binary" "$label_failure"
@@ -136,6 +160,15 @@ grep -qx 'animation_hooks=absent' "$minimal/etc/echolocal/.biscuit-addon"
 [ ! -e "$minimal/bin/start_animation.sh" ]
 [ ! -e "$minimal/bin/stop_animation.sh" ]
 
+toybox_symlink="$tmp/toybox-symlink"
+setup_system "$toybox_symlink"
+mv "$toybox_symlink/bin/base64" "$toybox_symlink/bin/toybox"
+ln -s toybox "$toybox_symlink/bin/base64"
+run_update "$install_binary" "$INSTALL_ZIP" "$toybox_symlink" biscuit 999999
+[ -L "$toybox_symlink/bin/base64" ]
+[ "$(readlink "$toybox_symlink/bin/base64")" = toybox ]
+[ -L "$toybox_symlink/bin/ledcontroller" ]
+
 wrong_device="$tmp/wrong-device"
 setup_system "$wrong_device"
 if run_update "$install_binary" "$INSTALL_ZIP" "$wrong_device" not-biscuit 999999; then
@@ -145,13 +178,14 @@ fi
 [ ! -e "$wrong_device/bin/ledcontroller.orig" ]
 [ ! -e "$wrong_device/bin/start_animation.sh.orig" ]
 
-missing_busybox="$tmp/missing-busybox"
-setup_system "$missing_busybox"
-rm "$missing_busybox/xbin/busybox"
-if run_update "$install_binary" "$INSTALL_ZIP" "$missing_busybox" biscuit 999999; then
-    printf '%s\n' 'missing base BusyBox was accepted' >&2
+missing_tool="$tmp/missing-tool"
+setup_system "$missing_tool"
+rm "$missing_tool/bin/base64"
+if run_update "$install_binary" "$INSTALL_ZIP" "$missing_tool" biscuit 999999; then
+    printf '%s\n' 'missing base tool was accepted' >&2
     exit 1
 fi
+[ ! -e "$missing_tool/bin/ledcontroller.orig" ]
 
 wrong_base="$tmp/wrong-base"
 setup_system "$wrong_base"
@@ -183,4 +217,4 @@ if run_update "$install_binary" "$bad_zip" "$bad_hash" biscuit 999999; then
     exit 1
 fi
 
-printf '%s\n' 'installer refusal, base BusyBox/CA preservation, symlink takeover, managed/absent hook, first-install state, and persistent-state checks passed'
+printf '%s\n' 'installer refusal, base-tool/CA preservation, symlink takeover, managed/absent hook, first-install state, and persistent-state checks passed'

@@ -14,9 +14,11 @@ framework-free Biscuit `cm12-minimal` base. Keep this project independent from
 - Generic init already starts and supervises `ledcontroller` as root after
   `post-fs-data`. Do not change boot.img, ramdisk, recovery, GPT, cache, or
   persist to integrate EchoLocal.
-- Use the base-provided `/system/xbin/busybox`; require it to be a regular,
-  executable file and never overwrite or remove it. The base also owns TLS
-  trust roots; never package, overwrite, or remove them.
+- Use only the required base commands (`base64`, `cat`, `chown`, `chmod`,
+  `cp`, `dd`, `id`, `mkdir`, `mv`, `rm`, `setprop`, and `wc`) through the
+  fixed `/system/bin:/system/xbin` path; require each to be executable and
+  never overwrite or remove base tools. They may be Toybox/Toolbox symlinks.
+  The base also owns TLS trust roots; never package, overwrite, or remove them.
 - Fail closed on a wrong device, wrong fallback, missing marker, bad payload,
   bad mode/context, unsafe symlink, or insufficient free space.
 
