@@ -3,7 +3,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/versions.sh"
-INSTALL_ZIP=${1:-"$ROOT/out/$ADDON_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"}
+INSTALL_ZIP=${1:-"$ROOT/out/$PACKAGE_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"}
 FIXTURE="$ROOT/tests/fixtures/ledcontroller"
 HOST_UNZIP=$(command -v unzip)
 [ -n "$HOST_UNZIP" ] || { printf '%s\n' 'missing host unzip' >&2; exit 1; }
@@ -15,6 +15,8 @@ HOST_UNZIP=$(command -v unzip)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/bin" "$tmp/recovery"
+radar_mac="$tmp/radar-mac"
+printf '%s\n' '000000037027' > "$radar_mac"
 cat > "$tmp/bin/getprop" <<'EOF'
 #!/bin/sh
 printf '%s\n' "${TEST_PRODUCT:-biscuit}"
@@ -40,6 +42,15 @@ cat > "$tmp/bin/chown" <<'EOF'
 exit 0
 EOF
 chmod 0755 "$tmp/bin/getprop" "$tmp/bin/chcon" "$tmp/bin/df" "$tmp/bin/chcon-fails" "$tmp/bin/chown"
+cat > "$tmp/bin/sha256sum-radar" <<EOF
+#!/bin/sh
+if [ "\$1" = "\$RADAR_BASE" ]; then
+    printf '%s  %s\n' "$RADAR_LEDCONTROLLER_SHA256" "\$1"
+else
+    exec sha256sum "\$@"
+fi
+EOF
+chmod 0755 "$tmp/bin/sha256sum-radar"
 cat > "$tmp/bin/unzip-no-glob" <<EOF
 #!/bin/sh
 for argument in "\$@"; do
@@ -78,26 +89,27 @@ run_update() {
     TEST_PRODUCT="$4" \
         ECHOLOCAL_SYSTEM="$3" ECHOLOCAL_STATE="$3-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
         ECHOLOCAL_FREE_KB="$5" GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" \
+        ECHOLOCAL_MAC_PATH="$radar_mac" \
         sh "$1" 3 1 "$2" >/dev/null
 }
 
 run_update_folded_df() {
     TEST_PRODUCT=biscuit ECHOLOCAL_SYSTEM="$2" ECHOLOCAL_STATE="$2-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
-        GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" DF="$tmp/bin/df" \
+        GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" DF="$tmp/bin/df" ECHOLOCAL_MAC_PATH="$radar_mac" \
         sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
 }
 
 run_update_no_glob_unzip() {
     TEST_PRODUCT=biscuit ECHOLOCAL_SYSTEM="$2" ECHOLOCAL_STATE="$2-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
         ECHOLOCAL_FREE_KB=999999 GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" \
-        UNZIP="$tmp/bin/unzip-no-glob" \
+        ECHOLOCAL_MAC_PATH="$radar_mac" UNZIP="$tmp/bin/unzip-no-glob" \
         sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
 }
 
 run_update_label_failure() {
     TEST_PRODUCT=biscuit ECHOLOCAL_SYSTEM="$2" ECHOLOCAL_STATE="$2-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
         ECHOLOCAL_FREE_KB=999999 GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon-fails" CHOWN="$tmp/bin/chown" \
-        sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
+        ECHOLOCAL_MAC_PATH="$radar_mac" sh "$1" 3 1 "$INSTALL_ZIP" >/dev/null
 }
 
 system="$tmp/system"
@@ -110,6 +122,7 @@ run_update "$install_binary" "$INSTALL_ZIP" "$system" biscuit 999999
 [ "$(sha256sum "$system/bin/ledcontroller.orig" | awk '{print $1}')" = "$BASE_LEDCONTROLLER_SHA256" ]
 [ -f "$system/etc/echolocal/.biscuit-addon" ]
 grep -qx "version=$ECHOLOCAL_TAG" "$system/etc/echolocal/.biscuit-addon"
+grep -qx 'product=biscuit' "$system/etc/echolocal/.biscuit-addon"
 [ "$(sha256sum "$system/etc/ssl/certs/ca-certificates.crt" | awk '{print $1}')" = "$base_ca_hash" ]
 grep -qx 'animation_hooks=managed' "$system/etc/echolocal/.biscuit-addon"
 [ "$(cat "$system/bin/start_animation.sh.orig")" = 'stock start animation' ]
@@ -118,6 +131,7 @@ grep -Fq 'echod.prev' "$system/bin/start_animation.sh"
 grep -Fq 'exit 0' "$system/bin/stop_animation.sh"
 state="$system-data/misc/echolocal"
 [ -s "$state/psk" ]
+grep -qx 'Echo Dot 037027' "$state/name"
 [ "$(wc -c < "$state/psk")" = 45 ]
 for model in okay_nabu hey_jarvis hey_mycroft; do
     cmp "$system/etc/echolocal/models/$model.json" "$state/models/$model.json"
@@ -136,6 +150,17 @@ run_update "$install_binary" "$INSTALL_ZIP" "$system" biscuit 999999
 [ "$(readlink "$system/bin/ledcontroller")" = "$system/app/echod/echod" ]
 [ "$(sha256sum "$state/psk" | awk '{print $1}')" = "$key_hash" ]
 [ "$(cat "$state/models/okay_nabu.json")" = 'custom model' ]
+
+radar_base="$tmp/radar-base"
+setup_system "$radar_base"
+TEST_PRODUCT=radar \
+    ECHOLOCAL_SYSTEM="$radar_base" ECHOLOCAL_STATE="$radar_base-data/misc/echolocal" ECHOLOCAL_TMPDIR="$tmp/recovery" \
+    ECHOLOCAL_FREE_KB=999999 GETPROP="$tmp/bin/getprop" CHCON="$tmp/bin/chcon" CHOWN="$tmp/bin/chown" \
+    ECHOLOCAL_MAC_PATH="$radar_mac" SHA256SUM="$tmp/bin/sha256sum-radar" RADAR_BASE="$radar_base/bin/ledcontroller" \
+    sh "$install_binary" 3 1 "$INSTALL_ZIP" >/dev/null
+[ -L "$radar_base/bin/ledcontroller" ]
+grep -qx 'product=radar' "$radar_base/etc/echolocal/.biscuit-addon"
+grep -qx 'Echo 037027' "$radar_base-data/misc/echolocal/name"
 
 folded_df="$tmp/folded-df"
 setup_system "$folded_df"

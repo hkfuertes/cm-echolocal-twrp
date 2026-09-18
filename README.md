@@ -1,11 +1,11 @@
 # cm-echolocal-twrp
 
-A reproducible, TWRP-flashable EchoLocal add-on for the framework-free Biscuit
-`cm12-minimal` base. Its payload lives in `/system`; it owns runtime state under `/data/misc/echolocal`.
+A reproducible, TWRP-flashable EchoLocal add-on for the framework-free
+Biscuit/Radar `cm12-minimal` base. Its payload lives in `/system`; it owns runtime state under `/data/misc/echolocal`.
 
 ## What it does
 
-- verifies the Biscuit device and the exact reserved generic
+- verifies the Biscuit/Radar device and an approved reserved generic
   `/system/bin/ledcontroller` fallback before installing;
 - preserves that fallback once as `ledcontroller.orig`;
 - replaces it with a symlink to `/system/app/echod/echod`; when both base
@@ -68,15 +68,14 @@ Toolchain caches, source checkouts, staging trees, and ZIPs stay under
 ignored `work/` and `out/`. Pins (tag, commit, image digest, per-target binary
 and model hashes) live in [`scripts/versions.sh`](scripts/versions.sh). The
 installer marker and ZIP names use the pinned upstream tag. Credentials never
-enter the repository or ZIP. ARMv7 carries no local source overlays or prebuilt
-binaries: upstream `0.0.7` supplies its ARM ABI fixes and architecture-aware
-updater.
+enter the repository or ZIP. A tracked Radar compatibility patch applies to an isolated
+copy for both targets; ARMv7 carries no local source overlays or prebuilt binaries.
 
 Flash exactly one architecture-specific ZIP in TWRP:
-`out/cm12-echolocal-biscuit-0.0.7-arm64.zip` or
-`out/cm12-echolocal-biscuit-0.0.7-armv7.zip`.
-Both install only on Biscuit where the reserved generic
-`/system/bin/ledcontroller` fallback matches the approved hash. It will reject
+`out/cm-echolocal-0.0.7-arm64.zip` or
+`out/cm-echolocal-0.0.7-armv7.zip`.
+Both install only on Biscuit/Radar where the reserved generic
+`/system/bin/ledcontroller` fallback matches an approved hash. It will reject
 a CM14/Fire OS base unless it presents that exact supported fallback. After a
 `/data` wipe, run `adb root`, then `adb shell echolocal repair`; obtain the new
 key with `adb shell echolocal key show` and reprovision Wi-Fi through the ROM.
@@ -85,5 +84,5 @@ Test on hardware before relying on it.
 ## Credits
 
 This add-on packages and integrates [EchoLocal](https://github.com/ygelfand/echolocal)
-by [ygelfand](https://github.com/ygelfand). This repository supplies only the Biscuit
+by [ygelfand](https://github.com/ygelfand). This repository supplies the Biscuit/Radar
 CM12 TWRP integration.

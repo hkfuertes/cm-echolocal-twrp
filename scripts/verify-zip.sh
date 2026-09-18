@@ -7,7 +7,7 @@ for tool in file find grep mktemp sha256sum stat unzip; do
     need "$tool"
 done
 
-install_zip=${1:-"$OUT/$ADDON_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"}
+install_zip=${1:-"$OUT/$PACKAGE_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"}
 [ -f "$install_zip" ] || fail "missing ZIP: $install_zip"
 
 verify_sidecar() {
@@ -84,6 +84,8 @@ grep -Fq 'exit 0' "$tmp/install/payload/system/bin/stop_animation.sh" ||
     fail 'stop animation hook is not a stub'
 grep -Fq 'repair)' "$tmp/install/payload/system/bin/echolocal" ||
     fail 'helper lacks repair command'
+grep -Fq 'ensure_device_name' "$tmp/install/payload/system/bin/echolocal" ||
+    fail 'helper lacks device name recovery'
 ! grep -Eq 'wpa_cli|wpa_passphrase|wifi_' "$tmp/install/payload/system/bin/echolocal" ||
     fail 'helper must not manage Wi-Fi'
 grep -qx "name=$ADDON_NAME" "$tmp/install/payload/system/etc/echolocal/.biscuit-addon" ||
@@ -96,13 +98,19 @@ grep -qx "base_ledcontroller_sha256=$BASE_LEDCONTROLLER_SHA256" \
 install_binary="$tmp/install/META-INF/com/google/android/update-binary"
 mode_is "$install_binary" 755
 sh -n "$install_binary"
+grep -qx "PACKAGE_NAME=$PACKAGE_NAME" "$install_binary" ||
+    fail 'installer has the wrong public package name'
 forbidden_operations "$install_binary"
 grep -Fq -- '--reference="$BACKUP"' "$install_binary" ||
     fail 'installer does not attempt labels from the preserved fallback'
 grep -Fq 'BACKUP="$SERVICE.orig"' "$install_binary" || fail 'installer does not preserve fallback'
+grep -Fq "BASE_LEDCONTROLLER_SHA256S='$BASE_LEDCONTROLLER_SHA256S'" "$install_binary" ||
+    fail 'installer lacks the approved fallback hashes'
 grep -Fq 'ln -s "$ECHOD"' "$install_binary" || fail 'installer does not create service symlink'
 grep -Fq 'initialize_runtime_state' "$install_binary" ||
     fail 'installer does not initialize first-install runtime state'
+grep -Fq 'ensure_device_name' "$install_binary" ||
+    fail 'installer does not initialize device names'
 grep -Fq 'STATE=${ECHOLOCAL_STATE:-/data/misc/echolocal}' "$install_binary" ||
     fail 'installer does not restrict runtime state to the add-on path'
 grep -Fq 'START_BACKUP="$START_ANIMATION.orig"' "$install_binary" ||

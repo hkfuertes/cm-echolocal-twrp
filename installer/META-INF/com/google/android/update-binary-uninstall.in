@@ -4,7 +4,9 @@ set -eu
 OUTFD=${2:-}
 SYSTEM=${ECHOLOCAL_SYSTEM:-/system}
 ADDON_NAME=@ADDON_NAME@
+PACKAGE_NAME=@PACKAGE_NAME@
 BASE_LEDCONTROLLER_SHA256=@BASE_LEDCONTROLLER_SHA256@
+BASE_LEDCONTROLLER_SHA256S='@BASE_LEDCONTROLLER_SHA256S@'
 GETPROP=${GETPROP:-getprop}
 SHA256SUM=${SHA256SUM:-sha256sum}
 
@@ -33,6 +35,14 @@ die() {
 
 hash_file() {
     "$SHA256SUM" "$1" | awk '{print $1}'
+}
+
+supported_base_hash() {
+    actual=$1
+    for approved in $BASE_LEDCONTROLLER_SHA256S; do
+        [ "$actual" = "$approved" ] && return 0
+    done
+    return 1
 }
 
 require_regular() {
@@ -105,9 +115,12 @@ ensure_system
 [ -f "$MARKER" ] && [ ! -L "$MARKER" ] || die 'add-on marker is missing; refusing to uninstall'
 product=$(read_prop ro.product.device)
 [ -n "$product" ] || product=$(read_prop ro.build.product)
-[ "$product" = biscuit ] || die "this ZIP is only for Biscuit (got ${product:-unknown})"
+case "$product" in
+    biscuit|radar) ;;
+    *) die "this ZIP is only for Biscuit/Radar (got ${product:-unknown})" ;;
+esac
 require_regular "$BACKUP"
-[ "$(hash_file "$BACKUP")" = "$BASE_LEDCONTROLLER_SHA256" ] ||
+supported_base_hash "$(hash_file "$BACKUP")" ||
     die 'preserved generic ledcontroller does not match the supported base'
 grep -qx "name=$ADDON_NAME" "$MARKER" || die 'unknown EchoLocal add-on marker'
 grep -qx "base_ledcontroller_sha256=$BASE_LEDCONTROLLER_SHA256" "$MARKER" ||
@@ -149,4 +162,4 @@ rmdir "$SYSTEM/etc/echolocal/models" 2>/dev/null || true
 rmdir "$SYSTEM/etc/echolocal" 2>/dev/null || true
 rmdir "$SYSTEM/app/echod" 2>/dev/null || true
 
-ui_print "$ADDON_NAME removed; persistent state was preserved"
+ui_print "$PACKAGE_NAME removed; persistent state was preserved"

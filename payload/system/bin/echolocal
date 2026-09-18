@@ -5,8 +5,11 @@ set -eu
 SYSTEM=${ECHOLOCAL_SYSTEM:-/system}
 STATE=${ECHOLOCAL_STATE:-/data/misc/echolocal}
 KEY="$STATE/psk"
+NAME="$STATE/name"
 MODELS="$STATE/models"
 SEED="$SYSTEM/etc/echolocal/models"
+MARKER="$SYSTEM/etc/echolocal/.biscuit-addon"
+MAC_PATH=${ECHOLOCAL_MAC_PATH:-/proc/idme/mac_addr}
 BASE_TOOLS='base64 cat chown chmod cp id mkdir mv rm setprop wc'
 BASE_DD=dd
 
@@ -33,6 +36,51 @@ ensure_state() {
     mkdir -p "$STATE"
     chown root:system "$STATE"
     chmod 0770 "$STATE"
+}
+
+mac_suffix() {
+    mac=$(cat "$MAC_PATH" 2>/dev/null || true)
+    case "$mac" in
+        ????????????) printf '%s' "${mac#??????}" ;;
+        ??:??:??:??:??:??)
+            tail=${mac#*:*:*:}
+            first=${tail%%:*}
+            tail=${tail#*:}
+            second=${tail%%:*}
+            third=${tail#*:}
+            printf '%s%s%s' "$first" "$second" "$third"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+ensure_device_name() {
+    [ ! -L "$NAME" ] || fail "refusing symlink state file: $NAME"
+    if [ -e "$NAME" ]; then
+        [ -f "$NAME" ] || fail "expected regular state file: $NAME"
+        return 0
+    fi
+    [ ! -e "$MARKER" ] && return 0
+    [ ! -L "$MARKER" ] || fail "refusing symlink marker: $MARKER"
+    [ -f "$MARKER" ] || fail "expected regular marker: $MARKER"
+    product=
+    while IFS= read -r line; do
+        case "$line" in product=*) product=${line#product=} ;; esac
+    done < "$MARKER"
+    case "$product" in
+        biscuit) prefix='Echo Dot' ;;
+        radar) prefix=Echo ;;
+        *) return 0 ;;
+    esac
+    if ! suffix=$(mac_suffix); then
+        return 0
+    fi
+    tmp="$STATE/.name.$$"
+    umask 077
+    printf '%s %s\n' "$prefix" "$suffix" > "$tmp" || fail 'could not create device name'
+    chown root:system "$tmp" || { rm -f "$tmp"; fail "could not set owner on $tmp"; }
+    chmod 0644 "$tmp" || { rm -f "$tmp"; fail "could not set mode on $tmp"; }
+    mv -f "$tmp" "$NAME" || { rm -f "$tmp"; fail 'could not install device name'; }
 }
 
 write_key() {
@@ -86,6 +134,7 @@ repair() {
     had_key=0
     [ -s "$KEY" ] && had_key=1
     key_ensure
+    ensure_device_name
     mkdir -p "$MODELS"
     chown root:system "$MODELS"
     chmod 0770 "$MODELS"

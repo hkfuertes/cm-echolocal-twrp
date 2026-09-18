@@ -10,6 +10,8 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 sys="$tmp/system"
 state="$tmp/data/misc/echolocal"
 props="$tmp/properties"
+mac="$tmp/radar-mac"
+printf '%s\n' '000000037027' > "$mac"
 mkdir -p "$sys/bin" "$sys/etc/echolocal/models"
 sed '1c#!/bin/sh' "$HELPER" > "$sys/bin/echolocal"
 chmod 0755 "$sys/bin/echolocal"
@@ -32,9 +34,10 @@ for model in okay_nabu hey_jarvis hey_mycroft; do
     printf '{"name":"%s"}\n' "$model" > "$sys/etc/echolocal/models/$model.json"
     printf 'model-%s\n' "$model" > "$sys/etc/echolocal/models/$model.tflite"
 done
+printf '%s\n' 'product=radar' > "$sys/etc/echolocal/.biscuit-addon"
 
 run_repair() {
-    ECHOLOCAL_SYSTEM="$sys" ECHOLOCAL_STATE="$state" TEST_PROPS="$props" \
+    ECHOLOCAL_SYSTEM="$sys" ECHOLOCAL_STATE="$state" ECHOLOCAL_MAC_PATH="$mac" TEST_PROPS="$props" \
         sh "$sys/bin/echolocal" repair
 }
 
@@ -47,6 +50,7 @@ grep -Fq 'missing base tool: base64' "$tmp/missing.err"
 
 run_repair >/dev/null 2>"$tmp/first.err"
 [ -s "$state/psk" ]
+grep -qx 'Echo 037027' "$state/name"
 for model in okay_nabu hey_jarvis hey_mycroft; do
     [ -f "$state/models/$model.json" ]
     [ -f "$state/models/$model.tflite" ]
@@ -54,9 +58,11 @@ done
 grep -qx 'ctl.restart=ledcontroller' "$props"
 key_hash=$(sha256sum "$state/psk" | awk '{print $1}')
 printf 'custom\n' > "$state/models/okay_nabu.json"
+printf '%s\n' 'Custom Radar' > "$state/name"
 : > "$props"
 run_repair >/dev/null
 [ "$(cat "$state/models/okay_nabu.json")" = custom ]
+[ "$(cat "$state/name")" = 'Custom Radar' ]
 [ "$(sha256sum "$state/psk" | awk '{print $1}')" = "$key_hash" ]
 grep -qx 'ctl.restart=ledcontroller' "$props"
 
@@ -64,8 +70,15 @@ rm -rf "$state"
 : > "$props"
 run_repair >/dev/null 2>"$tmp/wipe.err"
 [ -s "$state/psk" ]
+grep -qx 'Echo 037027' "$state/name"
 [ -f "$state/models/hey_mycroft.tflite" ]
 grep -qx 'ctl.restart=ledcontroller' "$props"
 grep -Fq 'new ESPHome key was generated' "$tmp/wipe.err"
+
+biscuit_state="$tmp/biscuit-data/misc/echolocal"
+printf '%s\n' 'product=biscuit' > "$sys/etc/echolocal/.biscuit-addon"
+ECHOLOCAL_SYSTEM="$sys" ECHOLOCAL_STATE="$biscuit_state" ECHOLOCAL_MAC_PATH="$mac" TEST_PROPS="$props" \
+    sh "$sys/bin/echolocal" repair >/dev/null
+grep -qx 'Echo Dot 037027' "$biscuit_state/name"
 
 printf '%s\n' 'repair first-run, preservation, and data-wipe checks passed'
