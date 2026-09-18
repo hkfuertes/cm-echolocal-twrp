@@ -1,0 +1,17 @@
+diff --git a/internal/layout/layout.go b/internal/layout/layout.go
+index 1aa50d9..716bafd 100644
+--- a/internal/layout/layout.go
++++ b/internal/layout/layout.go
+@@ -187,0 +188,4 @@ func Color(productID2, serial string) string {
++	if strings.HasPrefix(strings.TrimSpace(serial), "G090P") {
++		return black
++	}
++
+diff --git a/internal/layout/layout_test.go b/internal/layout/layout_test.go
+index 9834545..e622417 100644
+--- a/internal/layout/layout_test.go
++++ b/internal/layout/layout_test.go
+@@ -29,0 +30 @@ func TestColor(t *testing.T) {
++		radarSerial = "G090P00000000000"
+@@ -39,0 +41 @@ func TestColor(t *testing.T) {
++		{"Radar is black", "20", radarSerial, "black"},

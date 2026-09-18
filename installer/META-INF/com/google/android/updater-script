@@ -1,1 +1,1 @@
-ui_print("cm12-echolocal-biscuit uses its checked shell update-binary.");
+ui_print("cm-echolocal uses its checked shell update-binary.");

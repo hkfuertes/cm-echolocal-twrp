@@ -7,8 +7,10 @@ SYSTEM=${ECHOLOCAL_SYSTEM:-/system}
 STATE=${ECHOLOCAL_STATE:-/data/misc/echolocal}
 TMPDIR=${ECHOLOCAL_TMPDIR:-/dev/tmp}
 ADDON_NAME=@ADDON_NAME@
+PACKAGE_NAME=@PACKAGE_NAME@
 VERSION=@VERSION@
 BASE_LEDCONTROLLER_SHA256=@BASE_LEDCONTROLLER_SHA256@
+BASE_LEDCONTROLLER_SHA256S='@BASE_LEDCONTROLLER_SHA256S@'
 MANIFEST_SHA256=@MANIFEST_SHA256@
 PAYLOAD_BYTES=@PAYLOAD_BYTES@
 
@@ -35,6 +37,8 @@ MARKER="$SYSTEM/etc/echolocal/.biscuit-addon"
 STATE_PARENT=${STATE%/*}
 STATE_MODELS="$STATE/models"
 STATE_KEY="$STATE/psk"
+STATE_NAME="$STATE/name"
+MAC_PATH=${ECHOLOCAL_MAC_PATH:-/proc/idme/mac_addr}
 STAGE=
 FIRST_INSTALL=0
 SERVICE_BACKED_UP=0
@@ -45,6 +49,7 @@ CREATED_DIRS=
 CREATED_STATE_DIRS=
 CREATED_STATE_FILES=
 KEY_TMP=
+NAME_TMP=
 
 ui_print() {
     if [ -n "$OUTFD" ] && [ -e "/proc/self/fd/$OUTFD" ]; then
@@ -65,6 +70,14 @@ need_tool() {
 
 hash_file() {
     "$SHA256SUM" "$1" | awk '{print $1}'
+}
+
+supported_base_hash() {
+    actual=$1
+    for approved in $BASE_LEDCONTROLLER_SHA256S; do
+        [ "$actual" = "$approved" ] && return 0
+    done
+    return 1
 }
 
 require_regular() {
@@ -192,12 +205,54 @@ ensure_state_key() {
     CREATED_STATE_FILES="$STATE_KEY $CREATED_STATE_FILES"
 }
 
+mac_suffix() {
+    mac=$(cat "$MAC_PATH" 2>/dev/null || true)
+    case "$mac" in
+        ????????????) printf '%s' "${mac#??????}" ;;
+        ??:??:??:??:??:??)
+            tail=${mac#*:*:*:}
+            first=${tail%%:*}
+            tail=${tail#*:}
+            second=${tail%%:*}
+            third=${tail#*:}
+            printf '%s%s%s' "$first" "$second" "$third"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+ensure_device_name() {
+    [ ! -L "$STATE_NAME" ] || die "refusing symlink state file: $STATE_NAME"
+    if [ -e "$STATE_NAME" ]; then
+        require_regular "$STATE_NAME"
+        return 0
+    fi
+    case "$product" in
+        biscuit) prefix='Echo Dot' ;;
+        radar) prefix=Echo ;;
+        *) return 0 ;;
+    esac
+    if ! suffix=$(mac_suffix); then
+        return 0
+    fi
+    NAME_TMP="$STATE/.name.$$"
+    umask 077
+    printf '%s %s\n' "$prefix" "$suffix" > "$NAME_TMP" || die 'could not create device name'
+    "$CHOWN" 0:1000 "$NAME_TMP" || die "could not set owner on $NAME_TMP"
+    chmod 0644 "$NAME_TMP" || die "could not set mode on $NAME_TMP"
+    label_state_file "$NAME_TMP"
+    mv "$NAME_TMP" "$STATE_NAME" || die 'could not install device name'
+    NAME_TMP=
+    CREATED_STATE_FILES="$STATE_NAME $CREATED_STATE_FILES"
+}
+
 initialize_runtime_state() {
     [ "$STATE_PARENT" != "$STATE" ] && [ -d "$STATE_PARENT" ] && [ ! -L "$STATE_PARENT" ] ||
         die "missing safe data state parent: $STATE_PARENT"
     ensure_state_dir "$STATE" 0770
     ensure_state_dir "$STATE_MODELS" 0770
     ensure_state_key
+    ensure_device_name
     for model in okay_nabu hey_jarvis hey_mycroft; do
         seed_state_file "$SYSTEM/etc/echolocal/models/$model.json" "$STATE_MODELS/$model.json"
         seed_state_file "$SYSTEM/etc/echolocal/models/$model.tflite" "$STATE_MODELS/$model.tflite"
@@ -220,7 +275,8 @@ install_file() {
 
 install_marker() {
     install_file etc/echolocal/.biscuit-addon 644
-    printf 'animation_hooks=%s\n' "$HOOK_MODE" >> "$MARKER" || die 'could not write add-on marker'
+    printf 'product=%s\nanimation_hooks=%s\n' "$product" "$HOOK_MODE" >> "$MARKER" ||
+        die 'could not write add-on marker'
 }
 
 install_service_link() {
@@ -254,6 +310,7 @@ remove_new_payload() {
 
 remove_new_state() {
     [ -z "$KEY_TMP" ] || rm -f "$KEY_TMP" 2>/dev/null || true
+    [ -z "$NAME_TMP" ] || rm -f "$NAME_TMP" 2>/dev/null || true
     for file in $CREATED_STATE_FILES; do
         rm -f "$file" 2>/dev/null || true
     done
@@ -279,14 +336,17 @@ finish() {
 }
 trap finish EXIT HUP INT TERM
 
-for tool in "$GETPROP" "$SHA256SUM" "$UNZIP" "$CHCON" "$CHOWN" "$DD" "$BASE64" "$WC" "$DF" awk cp chmod find grep head ln mkdir mount mv readlink rm sed sha256sum; do
+for tool in "$GETPROP" "$SHA256SUM" "$UNZIP" "$CHCON" "$CHOWN" "$DD" "$BASE64" "$WC" "$DF" awk cat cp chmod find grep head ln mkdir mount mv readlink rm sed sha256sum; do
     need_tool "$tool"
 done
 
 [ -n "$ZIP" ] && [ -f "$ZIP" ] || die 'missing installation ZIP'
 product=$(read_prop ro.product.device)
 [ -n "$product" ] || product=$(read_prop ro.build.product)
-[ "$product" = biscuit ] || die "this ZIP is only for Biscuit (got ${product:-unknown})"
+case "$product" in
+    biscuit|radar) ;;
+    *) die "this ZIP is only for Biscuit/Radar (got ${product:-unknown})" ;;
+esac
 ensure_system
 for tool in $BASE_TOOLS; do
     require_base_tool "$tool"
@@ -299,7 +359,7 @@ if [ -f "$MARKER" ]; then
     grep -qx "base_ledcontroller_sha256=$BASE_LEDCONTROLLER_SHA256" "$MARKER" ||
         die 'add-on marker does not match the supported generic base'
     require_regular "$BACKUP"
-    [ "$(hash_file "$BACKUP")" = "$BASE_LEDCONTROLLER_SHA256" ] ||
+    supported_base_hash "$(hash_file "$BACKUP")" ||
         die 'preserved generic ledcontroller does not match the supported base'
     require_link_target "$SERVICE" "$ECHOD"
     if grep -qx 'animation_hooks=managed' "$MARKER"; then
@@ -322,7 +382,7 @@ if [ -f "$MARKER" ]; then
     [ ! -e "$ECHOD.prev" ] || die 'echod.prev is pending rollback; boot once before upgrading'
 else
     require_regular "$SERVICE"
-    [ "$(hash_file "$SERVICE")" = "$BASE_LEDCONTROLLER_SHA256" ] ||
+    supported_base_hash "$(hash_file "$SERVICE")" ||
         die 'unsupported generic base: ledcontroller hash does not match'
     if [ -f "$START_ANIMATION" ] && [ ! -L "$START_ANIMATION" ] && \
         [ -f "$STOP_ANIMATION" ] && [ ! -L "$STOP_ANIMATION" ]; then
@@ -408,4 +468,4 @@ initialize_runtime_state
 install_service_link
 install_marker
 
-ui_print "$ADDON_NAME $VERSION installed; runtime state initialized"
+ui_print "$PACKAGE_NAME $VERSION installed; runtime state initialized"

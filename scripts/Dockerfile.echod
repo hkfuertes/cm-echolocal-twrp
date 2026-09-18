@@ -24,6 +24,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+RUN GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)" go test ./internal/layout
 RUN go build -trimpath -buildvcs=false -ldflags "-s -w -X github.com/ygelfand/echolocal/internal/layout.Version=${VERSION} -X github.com/ygelfand/echolocal/internal/layout.GitCommit=${COMMIT} -X github.com/ygelfand/echolocal/internal/layout.BuildDate=${BUILD_DATE}" -o /out/echod ./cmd/echod
 
 # Export stage: empty filesystem holding only echod, owned by the invoking user

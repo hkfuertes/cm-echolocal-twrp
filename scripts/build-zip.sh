@@ -54,8 +54,10 @@ for path in $(LC_ALL=C find "$stage/payload" -type f -print | LC_ALL=C sort); do
 done
 
 sed -e "s/@ADDON_NAME@/$ADDON_NAME/g" \
+    -e "s/@PACKAGE_NAME@/$PACKAGE_NAME/g" \
     -e "s/@VERSION@/$ECHOLOCAL_TAG/g" \
     -e "s/@BASE_LEDCONTROLLER_SHA256@/$BASE_LEDCONTROLLER_SHA256/g" \
+    -e "s/@BASE_LEDCONTROLLER_SHA256S@/$BASE_LEDCONTROLLER_SHA256S/g" \
     -e "s/@MANIFEST_SHA256@/$manifest_sha/g" \
     -e "s/@PAYLOAD_BYTES@/$payload_bytes/g" \
     "$ROOT/installer/META-INF/com/google/android/update-binary.in" \
@@ -66,7 +68,7 @@ chmod 0755 "$stage/META-INF/com/google/android/update-binary"
 
 find "$stage" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 mkdir -p "$OUT"
-install_zip="$OUT/$ADDON_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"
+install_zip="$OUT/$PACKAGE_NAME-$ECHOLOCAL_TAG-$ECHOD_ARCH.zip"
 rm -f "$install_zip" "$install_zip.sha256"
 (
     cd "$stage"

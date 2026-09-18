@@ -1,8 +1,12 @@
 # Pinned, independently verifiable build inputs.
+# Keep this marker identity stable so renamed ZIPs upgrade existing installs.
 ADDON_NAME=cm12-echolocal-biscuit
+PACKAGE_NAME=cm-echolocal
 SOURCE_DATE_EPOCH=1700000000
 
 BASE_LEDCONTROLLER_SHA256=f7a2f96673fae0cb00836362f30d54ec15140829217c7c75b72b707af67ef0fc
+RADAR_LEDCONTROLLER_SHA256=8150881990783cd041fd88983d1dd30662d5acaafaf379d3ff7f2278b35eea4a
+BASE_LEDCONTROLLER_SHA256S="$BASE_LEDCONTROLLER_SHA256 $RADAR_LEDCONTROLLER_SHA256"
 
 # EchoLocal release tag and the commit it peels to: the single source both the
 # binaries and the models are built from. fetch-inputs.sh fails closed if the
@@ -18,10 +22,10 @@ GOOS=linux
 GOARCH=${GOARCH:-arm64}
 GOARM=${GOARM:-7}
 
-# Expected SHA-256s of deterministic clean builds (tag + image + flags above).
+# Expected SHA-256s of deterministic builds (tag + tracked patch + image + flags above).
 # Re-pin only after independently rebuilding the affected target.
-ECHOD_ARM64_SHA256=72957c9a9fc7056f7f0c6c74e9c4ebce5d7c8a1a57a81b7cf0b249fa90617dee
-ECHOD_ARMV7_SHA256=b87fa111c033185079a301f6adc9748cdc6483f2c19f621a58176074fa57bbaf
+ECHOD_ARM64_SHA256=d0b1cc3975986d19fb1b5881926b009d988c61be09ea0519bc9edaf5b0d07085
+ECHOD_ARMV7_SHA256=24effaec84210e3ebf02c14947fa90cec9898dcd7d1be3e06612c46584ac2ef4
 case "$GOARCH:$GOARM" in
     arm64:*) ECHOD_ARCH=arm64; ECHOD_SHA256=$ECHOD_ARM64_SHA256 ;;
     arm:7)   ECHOD_ARCH=armv7; ECHOD_SHA256=$ECHOD_ARMV7_SHA256 ;;
