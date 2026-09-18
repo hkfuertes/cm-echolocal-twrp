@@ -24,8 +24,8 @@ GOARM=${GOARM:-7}
 
 # Expected SHA-256s of deterministic builds (tag + tracked patch + image + flags above).
 # Re-pin only after independently rebuilding the affected target.
-ECHOD_ARM64_SHA256=d0b1cc3975986d19fb1b5881926b009d988c61be09ea0519bc9edaf5b0d07085
-ECHOD_ARMV7_SHA256=24effaec84210e3ebf02c14947fa90cec9898dcd7d1be3e06612c46584ac2ef4
+ECHOD_ARM64_SHA256=0e20b0c47a8ee5a7f73043b9fa7d9661e735da0c03414114f3e1b8edc703a011
+ECHOD_ARMV7_SHA256=55cacab3063b48fe51f3c7d9b61aa166b4c53d7af580232e557ef4567273aaf7
 case "$GOARCH:$GOARM" in
     arm64:*) ECHOD_ARCH=arm64; ECHOD_SHA256=$ECHOD_ARM64_SHA256 ;;
     arm:7)   ECHOD_ARCH=armv7; ECHOD_SHA256=$ECHOD_ARMV7_SHA256 ;;

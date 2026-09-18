@@ -68,7 +68,7 @@ Toolchain caches, source checkouts, staging trees, and ZIPs stay under
 ignored `work/` and `out/`. Pins (tag, commit, image digest, per-target binary
 and model hashes) live in [`scripts/versions.sh`](scripts/versions.sh). The
 installer marker and ZIP names use the pinned upstream tag. Credentials never
-enter the repository or ZIP. A tracked Radar color patch applies to an isolated
+enter the repository or ZIP. A tracked Radar compatibility patch applies to an isolated
 copy for both targets; ARMv7 carries no local source overlays or prebuilt binaries.
 
 Flash exactly one architecture-specific ZIP in TWRP:

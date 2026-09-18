@@ -1,0 +1,88 @@
+diff --git a/internal/feature/api/api.go b/internal/feature/api/api.go
+index ecc12ad..f09df0b 100644
+--- a/internal/feature/api/api.go
++++ b/internal/feature/api/api.go
+@@ -92 +92 @@ func (a *API) Start(context.Context) error {
+-			Model:             layout.Model,
++			Model:             layout.Model(layout.Idme("serial")),
+diff --git a/internal/feature/api/mdns.go b/internal/feature/api/mdns.go
+index dcca72a..f4eeff5 100644
+--- a/internal/feature/api/mdns.go
++++ b/internal/feature/api/mdns.go
+@@ -44 +44 @@ func (a *API) advertise(ctx context.Context, port int) {
+-			Board:        layout.Board,
++			Board:        layout.Board(layout.Idme("serial")),
+diff --git a/internal/feature/sendspin/session.go b/internal/feature/sendspin/session.go
+index 5971df4..c68bcf6 100644
+--- a/internal/feature/sendspin/session.go
++++ b/internal/feature/sendspin/session.go
+@@ -71 +71 @@ func newSession(conn *websocket.Conn, o *out, bg *speaker.Arbiter, name string,
+-			ProductName:     layout.Model,
++			ProductName:     layout.Model(layout.Idme("serial")),
+diff --git a/internal/layout/layout.go b/internal/layout/layout.go
+index 1aa50d9..fcb5c9d 100644
+--- a/internal/layout/layout.go
++++ b/internal/layout/layout.go
+@@ -93,2 +92,0 @@ const (
+-	Model        = "Echo Dot 2 (biscuit)"
+-	Board        = "biscuit"
+@@ -96,0 +95,5 @@ const (
++	biscuitModel = "Echo Dot 2 (biscuit)"
++	radarModel   = "Echo 2 (radar)"
++	biscuitBoard = "biscuit"
++	radarBoard   = "radar"
++
+@@ -100,0 +104,20 @@ const (
++func isRadar(serial string) bool {
++	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(serial)), "G090P")
++}
++
++// Model is the hardware identity Home Assistant shows in its device panel.
++func Model(serial string) string {
++	if isRadar(serial) {
++		return radarModel
++	}
++	return biscuitModel
++}
++
++// Board is the mDNS hardware board identifier.
++func Board(serial string) string {
++	if isRadar(serial) {
++		return radarBoard
++	}
++	return biscuitBoard
++}
++
+@@ -187,0 +211,4 @@ func Color(productID2, serial string) string {
++	if isRadar(serial) {
++		return black
++	}
++
+diff --git a/internal/layout/layout_test.go b/internal/layout/layout_test.go
+index 9834545..63d8565 100644
+--- a/internal/layout/layout_test.go
++++ b/internal/layout/layout_test.go
+@@ -29,0 +30 @@ func TestColor(t *testing.T) {
++		radarSerial = "G090P00000000000"
+@@ -39,0 +41 @@ func TestColor(t *testing.T) {
++		{"Radar is black", "20", radarSerial, "black"},
+@@ -53,0 +56,19 @@ func TestColor(t *testing.T) {
++func TestIdentity(t *testing.T) {
++	tests := []struct {
++		serial, model, board string
++	}{
++		{"G090P3088394093M", "Echo 2 (radar)", "radar"},
++		{"g090p0000000000", "Echo 2 (radar)", "radar"},
++		{"G090LF0000000000", "Echo Dot 2 (biscuit)", "biscuit"},
++		{"", "Echo Dot 2 (biscuit)", "biscuit"},
++	}
++	for _, tt := range tests {
++		if got := Model(tt.serial); got != tt.model {
++			t.Errorf("Model(%q) = %q, want %q", tt.serial, got, tt.model)
++		}
++		if got := Board(tt.serial); got != tt.board {
++			t.Errorf("Board(%q) = %q, want %q", tt.serial, got, tt.board)
++		}
++	}
++}
++

@@ -18,14 +18,14 @@ git -C "$source_tree" diff --quiet ||
 commit_short=$(git -C "$source_tree" rev-parse HEAD | cut -c1-7)
 build_date=$(date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ')
 
-patch="$ROOT/scripts/patches/echolocal-radar-color.patch"
-[ -f "$patch" ] || fail "missing EchoLocal color patch: $patch"
+patch="$ROOT/scripts/patches/echolocal-radar.patch"
+[ -f "$patch" ] || fail "missing EchoLocal Radar patch: $patch"
 build_tree="$WORK/build/echolocal-$ECHOD_ARCH"
 rm -rf "$build_tree"
 mkdir -p "$(dirname "$build_tree")"
 cp -a "$source_tree" "$build_tree"
 git -C "$build_tree" apply --check --unidiff-zero "$patch" ||
-    fail "EchoLocal color patch does not apply to $ECHOLOCAL_COMMIT"
+    fail "EchoLocal Radar patch does not apply to $ECHOLOCAL_COMMIT"
 git -C "$build_tree" apply --unidiff-zero "$patch"
 
 artifact_dir="$INPUTS/$ECHOD_ARCH"
